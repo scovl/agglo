@@ -1,0 +1,1 @@
+{:lint-as {cljs.core/fn clojure.core/def}}

@@ -1,0 +1,2 @@
+{:require [agglo.core]
+ :init-fn agglo.core/init}
