@@ -4,28 +4,71 @@
             [clojure.zip :as zip]
             [clojure.data.zip.xml :as zf]
             [clojure.edn :as edn]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log])
+  (:import (java.io ByteArrayInputStream)))
 
 (defn load-config []
-  (edn/read-string (slurp (io/resource "config.edn"))))
+  (try
+    (let [config-file-path "resources/config.edn"
+          config-file (io/file config-file-path)]
+      (if (.exists config-file)
+        (do
+          (log/info "Loading config from" config-file-path)
+          (let [config (edn/read-string (slurp config-file))]
+            (log/info "Config loaded:" config)
+            config))
+        (do
+          (log/error "Config file not found")
+          {})))
+    (catch Exception e
+      (log/error e "Error loading config")
+      {})))
 
 (defn fetch-feed [url]
-  (let [response (client/get url)
-        body (:body response)]
-    (-> body
-        (xml/parse)
-        (zip/xml-zip))))
+  (log/info "Fetching feed from URL:" url)
+  (try
+    (let [response (client/get url {:as :string :socket-timeout 5000 :conn-timeout 5000})
+          body (:body response)]
+      (log/info "Feed fetched successfully from" url)
+      (with-open [stream (ByteArrayInputStream. (.getBytes body "UTF-8"))]
+        (-> stream
+            xml/parse
+            zip/xml-zip)))
+    (catch Exception e
+      (log/error e "Error fetching feed from URL" url e)
+      nil)))
+
+(defn safe-get [ctx path-fn default]
+  (try
+    (path-fn ctx)
+    (catch IllegalArgumentException _ default)))
 
 (defn parse-feed [feed]
-  (let [entries (zf/xml1-> feed :channel :item)]
-    (map (fn [entry]
-           {:title (zf/xml1-> entry :title zf/text)
-            :link  (zf/xml1-> entry :link zf/text)
-            :description (zf/xml1-> entry :description zf/text)})
-         entries)))
+  (try
+    (let [first-entry (zf/xml1-> feed :channel :item)]
+      (log/info "Parsing first feed entry")
+      (when first-entry
+        (let [title (safe-get first-entry #(zf/xml1-> % :title zf/text) "")
+              link (safe-get first-entry #(zf/xml1-> % :link zf/text) "")
+              description (safe-get first-entry #(zf/xml1-> % :description zf/text) "")]
+          {:title title
+           :link link
+           :description description})))
+    (catch Exception e
+      (log/error e "Error parsing feed entry" e)
+      nil)))
 
 (defn fetch-feeds []
-  (let [config (load-config)
-        feed-urls (:rss-urls config)
-        feeds (map fetch-feed feed-urls)]
-    (flatten (map parse-feed feeds))))
+  (try
+    (let [config (load-config)
+          feed-urls (:rss-urls config)]
+      (log/info "Feed URLs to fetch:" feed-urls)
+      (let [feeds (map fetch-feed feed-urls)]
+        (log/info "Feeds fetched, now parsing")
+        (let [parsed-feeds (filter some? (map parse-feed feeds))]
+          (log/info "Parsed feeds:" parsed-feeds)
+          parsed-feeds)))
+    (catch Exception e
+      (log/error e "Error fetching or parsing feeds")
+      [])))
