@@ -2,26 +2,31 @@
   (:require [reagent.core :as r]
             [reagent.dom :as dom]
             [ajax.core :refer [GET]]
+            [cljs.core.async :refer [chan put! <! go]]
             [agglo.views :refer [example-view]]))
 
 (defn fetch-feeds []
-  (let [feeds (r/atom [])]
+  (let [feeds (r/atom [])
+        ch (chan)]
     (GET "/feeds"
       {:handler (fn [response]
-                  (js/console.log "Feeds fetched successfully" response)
-                  (reset! feeds response))
+                  (put! ch response)
+                  (js/console.log "Feeds fetched successfully" response))
        :error-handler (fn [error]
                         (js/console.error "Failed to fetch feeds" error))})
+    (go (reset! feeds (<! ch)))
     feeds))
 
 (defn fetch-blog-links []
-  (let [blogs (r/atom [])]
+  (let [blogs (r/atom [])
+        ch (chan)]
     (GET "/blog-links"
       {:handler (fn [response]
-                  (js/console.log "Blog links fetched successfully" response)
-                  (reset! blogs (:rss-urls response)))
+                  (put! ch (:rss-urls response))
+                  (js/console.log "Blog links fetched successfully" response))
        :error-handler (fn [error]
                         (js/console.error "Failed to fetch blog links" error))})
+    (go (reset! blogs (<! ch)))
     blogs))
 
 (defn home-page []
