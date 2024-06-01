@@ -1,21 +1,62 @@
 (ns agglo.service
   (:require [io.pedestal.http :as http]
             [io.pedestal.http.route :as route]
-            [agglo.feed :as feed]
-            [clojure.java.io :as io]))
+            [cheshire.core :as json]
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
+            [agglo.feed :as feed])
+  (:import (org.apache.log4j PropertyConfigurator)))
+
+; Inicializar Log4j
+(PropertyConfigurator/configure (io/resource "log4j.properties"))
 
 (defn home-page [request]
-  {:status 200
-   :headers {"Content-Type" "text/html"}
-   :body (slurp (io/resource "public/index.html"))})
+  (try
+    (log/info "Serving home page")
+    (let [html-file (io/file "resources/public/index.html")]
+      (log/info "HTML file path:" html-file)
+      (if (.exists html-file)
+        {:status 200
+         :headers {"Content-Type" "text/html"}
+         :body (slurp html-file)}
+        (do
+          (log/error "HTML file not found")
+          {:status 500
+           :headers {"Content-Type" "application/json"}
+           :body (json/generate-string {:error "Internal server error: HTML file not found"})})))
+    (catch Exception e
+      (log/error e "Error serving home page")
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string {:error "Internal server error"})})))
 
 (defn feeds [request]
-  {:status 200
-   :body (feed/fetch-feeds)})
+  (log/info "Fetching feeds")
+  (try
+    (let [feeds-data (feed/fetch-feeds)]
+      (log/info "Feeds fetched successfully" feeds-data)
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string feeds-data)})
+    (catch Exception e
+      (log/error e "Error fetching feeds" e)
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string {:error "Internal server error"})})))
 
 (defn blog-links [request]
-  {:status 200
-   :body (feed/load-config)})
+  (log/info "Fetching blog links")
+  (try
+    (let [config (feed/load-config)]
+      (log/info "Blog links fetched successfully" config)
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string (:rss-urls config))})
+    (catch Exception e
+      (log/error e "Error fetching blog links" e)
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string {:error "Internal server error"})})))
 
 (def routes
   (route/expand-routes
