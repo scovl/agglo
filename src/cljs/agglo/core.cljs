@@ -5,15 +5,30 @@
             [cljs.core.async :refer [chan put! <! go]]
             [agglo.views :refer [example-view]]))
 
+;; Private function to handle the fetch-feeds response
+(defn- handle-fetch-feeds-response [ch feeds response]
+  (put! ch response)
+  (js/console.log "Feeds fetched successfully" response))
+
+;; Private function to handle fetch-feeds errors
+(defn- handle-fetch-feeds-error [error]
+  (js/console.error "Failed to fetch feeds" error))
+
+;; Private function to handle the fetch-blog-links response
+(defn- handle-fetch-blog-links-response [ch blogs response]
+  (put! ch (:rss-urls response))
+  (js/console.log "Blog links fetched successfully" response))
+
+;; Private function to handle fetch-blog-links errors
+(defn- handle-fetch-blog-links-error [error]
+  (js/console.error "Failed to fetch blog links" error))
+
 (defn fetch-feeds []
   (let [feeds (r/atom [])
         ch (chan)]
     (GET "/feeds"
-      {:handler (fn [response]
-                  (put! ch response)
-                  (js/console.log "Feeds fetched successfully" response))
-       :error-handler (fn [error]
-                        (js/console.error "Failed to fetch feeds" error))})
+      {:handler (partial handle-fetch-feeds-response ch feeds)
+       :error-handler handle-fetch-feeds-error})
     (go (reset! feeds (<! ch)))
     feeds))
 
@@ -21,11 +36,8 @@
   (let [blogs (r/atom [])
         ch (chan)]
     (GET "/blog-links"
-      {:handler (fn [response]
-                  (put! ch (:rss-urls response))
-                  (js/console.log "Blog links fetched successfully" response))
-       :error-handler (fn [error]
-                        (js/console.error "Failed to fetch blog links" error))})
+      {:handler (partial handle-fetch-blog-links-response ch blogs)
+       :error-handler handle-fetch-blog-links-error})
     (go (reset! blogs (<! ch)))
     blogs))
 
@@ -39,7 +51,7 @@
         (for [{:keys [title link description]} @feeds]
           [:div.feed
            [:h2 [:a {:href link} title]]
-           [:p description]])]
+           [:p (first (clojure.string/split description #"\n"))]])] ; Show first paragraph
        [:div#sidebar
         [:h1 "Blog Links"]
         [:ul
