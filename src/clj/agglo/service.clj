@@ -4,43 +4,57 @@
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [agglo.feed :as feed])
+            [agglo.feed :as feed]
+            [ring.util.response :as response])
   (:import (org.apache.log4j PropertyConfigurator)))
 
 ; Inicializar Log4j
 (PropertyConfigurator/configure (io/resource "log4j.properties"))
 
-(defn home-page [request]
+(defn load-html-file [resource-path]
+  (let [resource (io/file resource-path)]
+    (if (.exists resource)
+      (slurp resource)
+      (do
+        (log/error "HTML file not found at" resource-path)
+        nil))))
+
+(defn replace-placeholder [html placeholder content]
+  (clojure.string/replace html placeholder content))
+
+(defn render-home-page [feeds]
+  (let [html-content (load-html-file "resources/public/index.html")]
+    (if html-content
+      (replace-placeholder html-content
+                           "{{feeds}}"
+                           (apply str
+                                  (map (fn [{:keys [title link description]}]
+                                         (format "<div class='feed'>
+                                                   <h2><a href='%s'>%s</a></h2>
+                                                   <p>%s</p>
+                                                  </div>"
+                                                 link title (first (clojure.string/split description #"\n\n"))))
+                                       feeds)))
+      "HTML file not found")))
+
+(defn home-page-handler [request]
   (try
     (log/info "Serving home page")
-    (let [html-file (io/file "resources/public/index.html")
-          feeds (feed/fetch-feeds)]
-      (log/info "HTML file path:" html-file)
-      (if (.exists html-file)
-        {:status 200
-         :headers {"Content-Type" "text/html"}
-         :body (-> (slurp html-file)
-                   (clojure.string/replace "{{feeds}}"
-                                           (apply str
-                                                  (map (fn [{:keys [title link description]}]
-                                                         (format "<div class='feed'>
-                                                                   <h2><a href='%s'>%s</a></h2>
-                                                                   <p>%s</p>
-                                                                  </div>"
-                                                                 link title (subs description 0 (min 800 (count description)))))
-                                                       feeds))))}
-        (do
-          (log/error "HTML file not found")
-          {:status 500
-           :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:error "Internal server error: HTML file not found"})})))
+    (let [feeds (feed/fetch-feeds)
+          rendered-content (render-home-page feeds)]
+      (if (= rendered-content "HTML file not found")
+        (-> (response/response rendered-content)
+            (response/status 500)
+            (response/content-type "application/json"))
+        (-> (response/response rendered-content)
+            (response/content-type "text/html; charset=utf-8"))))
     (catch Exception e
       (log/error e "Error serving home page" e)
       {:status 500
        :headers {"Content-Type" "application/json"}
        :body (json/generate-string {:error "Internal server error"})})))
 
-(defn feeds [request]
+(defn feeds-handler [request]
   (log/info "Fetching feeds")
   (try
     (let [feeds-data (feed/fetch-feeds)]
@@ -54,7 +68,7 @@
        :headers {"Content-Type" "application/json"}
        :body (json/generate-string {:error "Internal server error"})})))
 
-(defn blog-links [request]
+(defn blog-links-handler [request]
   (log/info "Fetching blog links")
   (try
     (let [config (feed/load-config)]
@@ -70,9 +84,9 @@
 
 (def routes
   (route/expand-routes
-   #{["/" :get home-page :route-name :home]
-     ["/feeds" :get feeds :route-name :feeds]
-     ["/blog-links" :get blog-links :route-name :blog-links]}))
+   #{["/" :get home-page-handler :route-name :home]
+     ["/feeds" :get feeds-handler :route-name :feeds]
+     ["/blog-links" :get blog-links-handler :route-name :blog-links]}))
 
 (def service
   {:env :prod
