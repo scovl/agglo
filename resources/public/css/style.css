@@ -1,0 +1,21 @@
+/* Fundo em degradê de laranja para lilás */
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(45deg, orange, purple);
+  font-family: Arial, sans-serif;
+}
+
+/* Caixa centralizada, arredondada e branca */
+.centered-box {
+  background-color: white;
+  border-radius: 15px;
+  padding: 20px 40px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  font-size: 2rem;
+  color: black;
+}
