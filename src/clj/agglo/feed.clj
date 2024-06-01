@@ -8,6 +8,11 @@
             [clojure.tools.logging :as log])
   (:import (java.io ByteArrayInputStream)))
 
+(defn safe-get [ctx path-fn default]
+  (try
+    (path-fn ctx)
+    (catch IllegalArgumentException _ default)))
+
 (defn load-config []
   (try
     (let [config-file-path "resources/config.edn"
@@ -38,11 +43,6 @@
     (catch Exception e
       (log/error e "Error fetching feed from URL" url e)
       nil)))
-
-(defn safe-get [ctx path-fn default]
-  (try
-    (path-fn ctx)
-    (catch IllegalArgumentException _ default)))
 
 (defn parse-feed [feed]
   (try
