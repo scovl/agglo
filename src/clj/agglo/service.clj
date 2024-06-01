@@ -13,19 +13,29 @@
 (defn home-page [request]
   (try
     (log/info "Serving home page")
-    (let [html-file (io/file "resources/public/index.html")]
+    (let [html-file (io/file "resources/public/index.html")
+          feeds (feed/fetch-feeds)]
       (log/info "HTML file path:" html-file)
       (if (.exists html-file)
         {:status 200
          :headers {"Content-Type" "text/html"}
-         :body (slurp html-file)}
+         :body (-> (slurp html-file)
+                   (clojure.string/replace "{{feeds}}"
+                                           (apply str
+                                                  (map (fn [{:keys [title link description]}]
+                                                         (format "<div class='feed'>
+                                                                   <h2><a href='%s'>%s</a></h2>
+                                                                   <p>%s</p>
+                                                                  </div>"
+                                                                 link title (subs description 0 (min 800 (count description)))))
+                                                       feeds))))}
         (do
           (log/error "HTML file not found")
           {:status 500
            :headers {"Content-Type" "application/json"}
            :body (json/generate-string {:error "Internal server error: HTML file not found"})})))
     (catch Exception e
-      (log/error e "Error serving home page")
+      (log/error e "Error serving home page" e)
       {:status 500
        :headers {"Content-Type" "application/json"}
        :body (json/generate-string {:error "Internal server error"})})))
