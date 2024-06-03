@@ -1,2 +1,3 @@
 {:rss-urls ["https://fidelissauro.dev/feed.xml",
-            "https://gomex.me/blog/index.xml"]}
+            "https://gomex.me/blog/index.xml",
+            "https://infoslack.com/atom.xml"]}
