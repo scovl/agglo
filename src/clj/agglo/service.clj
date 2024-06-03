@@ -25,7 +25,6 @@
                                                <p>%s</p>
                                               </div>"
                                              link title (if (string? description-text)
-                                                          (first (str/split description-text #"\n"))
                                                           description-text))))
                                  feeds))))
     (catch Exception e
