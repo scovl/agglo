@@ -4,50 +4,50 @@
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [agglo.feed :as feed]
-            [ring.util.response :as response])
+            [clojure.string :as str]
+            [agglo.feed :as feed])
   (:import (org.apache.log4j PropertyConfigurator)))
 
 ; Inicializar Log4j
 (PropertyConfigurator/configure (io/resource "log4j.properties"))
 
-(defn load-html-file [resource-path]
-  (let [resource (io/file resource-path)]
-    (if (.exists resource)
-      (slurp resource)
-      (do
-        (log/error "HTML file not found at" resource-path)
-        nil))))
-
-(defn replace-placeholder [html placeholder content]
-  (clojure.string/replace html placeholder content))
-
-(defn render-home-page [feeds]
-  (let [html-content (load-html-file "resources/public/index.html")]
-    (if html-content
-      (replace-placeholder html-content
-                           "{{feeds}}"
-                           (apply str
-                                  (map (fn [{:keys [title link description]}]
-                                         (format "<div class='feed'>
-                                                   <h2><a href='%s'>%s</a></h2>
-                                                   <p>%s</p>
-                                                  </div>"
-                                                 link title (first (clojure.string/split description #"\n\n"))))
-                                       feeds)))
-      "HTML file not found")))
+(defn render-home-page [html-content feeds]
+  (try
+    (-> html-content
+        (str/replace "{{feeds}}"
+                     (apply str
+                            (map (fn [{:keys [title link description]}]
+                                   (let [description-text (if (map? description)
+                                                            (:value description)
+                                                            description)]
+                                     (format "<div class='feed'>
+                                               <h2><a href='%s'>%s</a></h2>
+                                               <p>%s</p>
+                                              </div>"
+                                             link title (if (string? description-text)
+                                                          (first (str/split description-text #"\n"))
+                                                          description-text))))
+                                 feeds))))
+    (catch Exception e
+      (log/error e "Error rendering home page")
+      "Internal server error")))
 
 (defn home-page-handler [request]
   (try
     (log/info "Serving home page")
-    (let [feeds (feed/fetch-feeds)
-          rendered-content (render-home-page feeds)]
-      (if (= rendered-content "HTML file not found")
-        (-> (response/response rendered-content)
-            (response/status 500)
-            (response/content-type "application/json"))
-        (-> (response/response rendered-content)
-            (response/content-type "text/html; charset=utf-8"))))
+    (let [html-file-path "resources/public/index.html"
+          html-file (io/file html-file-path)
+          feeds (feed/fetch-feeds)]
+      (log/info "HTML file path:" html-file-path)
+      (if (.exists html-file)
+        {:status 200
+         :headers {"Content-Type" "text/html; charset=utf-8"}
+         :body (render-home-page (slurp html-file) feeds)}
+        (do
+          (log/error "HTML file not found at" html-file-path)
+          {:status 500
+           :headers {"Content-Type" "application/json"}
+           :body (json/generate-string {:error "Internal server error: HTML file not found"})})))
     (catch Exception e
       (log/error e "Error serving home page" e)
       {:status 500
@@ -60,7 +60,7 @@
     (let [feeds-data (feed/fetch-feeds)]
       (log/info "Feeds fetched successfully" feeds-data)
       {:status 200
-       :headers {"Content-Type" "application/json"}
+       :headers {"Content-Type" "application/json; charset=utf-8"}
        :body (json/generate-string feeds-data)})
     (catch Exception e
       (log/error e "Error fetching feeds" e)
