@@ -2,52 +2,50 @@
   (:require [ring.util.response :as response]
             [agglo.feed :as feed]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]))
 
-(defn load-html-file [resource-path]
-  (let [resource (io/resource resource-path)]
-    (if resource
-      (slurp resource)
+(defn render-home-page [html-content feeds]
+  (try
+    (-> html-content
+        (str/replace "{{feeds}}"
+                     (apply str
+                            (map (fn [{:keys [title link description]}]
+                                   (let [description-text (if (map? description)
+                                                            (:value description)
+                                                            description)]
+                                     (format "<div class='feed'>
+                                               <h2><a href='%s'>%s</a></h2>
+                                               <p>%s</p>
+                                              </div>"
+                                             link title (if (string? description-text)
+                                                          (first (str/split description-text #"\n"))
+                                                          description-text))))
+                                 feeds))))
+    (catch Exception e
+      (log/error e "Error rendering home page")
+      "Internal server error")))
+
+(defn home-page []
+  (let [html-file-path "resources/public/index.html"
+        html-file (io/file html-file-path)
+        feeds (feed/fetch-feeds)]
+    (if (.exists html-file)
+      (-> (render-home-page (slurp html-file) feeds)
+          (response/response)
+          (response/content-type "text/html; charset=utf-8"))
       (do
-        (println "HTML file not found at" resource-path)
-        nil))))
+        (log/error "HTML file not found at" html-file-path)
+        (response/status (response/response "HTML file not found") 500)))))
 
-(defn replace-placeholder [html placeholder content]
-  (str/replace html placeholder content))
-
-(defn render-home-page [feeds]
-  (let [html-content (load-html-file "public/index.html")]
-    (if html-content
-      (replace-placeholder html-content
-                           "{{feeds}}"
-                           (apply str
-                                  (map (fn [{:keys [title link description]}]
-                                         (format "<div class='feed'>
-                                                   <h2><a href='%s'>%s</a></h2>
-                                                   <p>%s</p>
-                                                  </div>"
-                                                 link title (first (str/split description #"\n\n"))))
-                                       feeds)))
-      "HTML file not found")))
-
-(defn home-page-handler [request]
-  (let [feeds (feed/fetch-feeds)
-        rendered-content (render-home-page feeds)]
-    (if (= rendered-content "HTML file not found")
-      (-> (response/response rendered-content)
-          (response/status 500)
-          (response/content-type "application/json"))
-      (-> (response/response rendered-content)
-          (response/content-type "text/html; charset=utf-8")))))
-
-(defn feeds-handler [request]
+(defn feeds []
   (response/response (feed/fetch-feeds)))
 
-(defn blog-links-handler [request]
+(defn blog-links []
   (response/response (feed/load-config)))
 
 (def app
   (ring/ring-handler
    (ring/router
-    [["/" {:get home-page-handler}]
-     ["/blog-links" {:get blog-links-handler}]])))
+    [["/" {:get home-page}]
+     ["/blog-links" {:get blog-links}]])))
