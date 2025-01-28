@@ -6,7 +6,7 @@
 
 (defn home-page []
   (let [html-file (io/resource "public/index.html")
-        feeds (feed/fetch-feeds)]
+        feeds (feed/fetch-feeds)]  ;; Corrigido aqui
     (if html-file
       (-> (slurp html-file)
           (render-home-page feeds)
@@ -15,7 +15,7 @@
       (response/status (response/response "HTML file not found") 500))))
 
 (defn feeds []
-  (response/response (feed/fetch-feeds)))
+  (response/response (feed/fetch-feeds)))  ;; Corrigido aqui
 
 (defn blog-links []
   (response/response (feed/load-config)))

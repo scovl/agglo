@@ -1,18 +1,31 @@
 (ns agglo.service
   (:require [io.pedestal.http :as http]
             [io.pedestal.http.route :as route]
-            [cheshire.core :as json]
+            [cognitect.transit :as transit]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.string :as str]
             [agglo.feed :as feed])
-  (:import (org.apache.log4j PropertyConfigurator)))
+  (:import (java.io ByteArrayOutputStream ByteArrayInputStream)
+           (org.apache.log4j PropertyConfigurator)))
 
-; Inicializar Log4j
+;; Inicializar Log4j
 (PropertyConfigurator/configure (io/resource "log4j.properties"))
+
+(defn write-transit [data]
+  (let [out (ByteArrayOutputStream.)
+        writer (transit/writer out :json)]
+    (transit/write writer data)
+    (.toString out)))
+
+(defn read-transit [data]
+  (let [in (ByteArrayInputStream. (.getBytes data))
+        reader (transit/reader in :json)]
+    (transit/read reader)))
 
 (defn render-home-page [html-content feeds]
   (try
+    (log/info "Rendering home page with feeds:" feeds)
     (-> html-content
         (str/replace "{{feeds}}"
                      (apply str
@@ -22,13 +35,12 @@
                                                             description)]
                                      (format "<div class='feed'>
                                                <h2><a href='%s'>%s</a></h2>
-                                               <p>%s</p>
+                                               <div>%s</div>
                                               </div>"
-                                             link title (if (string? description-text)
-                                                          description-text))))
+                                             (or link "#") (or title "No title") (or description-text "No description"))))
                                  feeds))))
     (catch Exception e
-      (log/error e "Error rendering home page")
+      (log/error e "Error rendering home page" e)
       "Internal server error")))
 
 (defn home-page-handler [request]
@@ -36,36 +48,41 @@
     (log/info "Serving home page")
     (let [html-file-path "resources/public/index.html"
           html-file (io/file html-file-path)
-          feeds (feed/fetch-feeds)]
+          feeds (feed/fetch-feeds)]  ;; Corrigido aqui
       (log/info "HTML file path:" html-file-path)
+      (log/info "Feeds data:" feeds)
       (if (.exists html-file)
-        {:status 200
-         :headers {"Content-Type" "text/html; charset=utf-8"}
-         :body (render-home-page (slurp html-file) feeds)}
+        (do
+          (log/info "HTML file found, loading content")
+          (let [content (slurp html-file)]
+            (log/info "HTML file content loaded successfully")
+            {:status 200
+             :headers {"Content-Type" "text/html; charset=utf-8"}
+             :body (render-home-page content feeds)}))
         (do
           (log/error "HTML file not found at" html-file-path)
           {:status 500
            :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:error "Internal server error: HTML file not found"})})))
+           :body (write-transit {:error "Internal server error: HTML file not found"})})))
     (catch Exception e
       (log/error e "Error serving home page" e)
       {:status 500
        :headers {"Content-Type" "application/json"}
-       :body (json/generate-string {:error "Internal server error"})})))
+       :body (write-transit {:error "Internal server error"})})))
 
 (defn feeds-handler [request]
   (log/info "Fetching feeds")
   (try
-    (let [feeds-data (feed/fetch-feeds)]
+    (let [feeds-data (feed/fetch-feeds)]  ;; Corrigido aqui
       (log/info "Feeds fetched successfully" feeds-data)
       {:status 200
        :headers {"Content-Type" "application/json; charset=utf-8"}
-       :body (json/generate-string feeds-data)})
+       :body (write-transit feeds-data)})
     (catch Exception e
       (log/error e "Error fetching feeds" e)
       {:status 500
        :headers {"Content-Type" "application/json"}
-       :body (json/generate-string {:error "Internal server error"})})))
+       :body (write-transit {:error "Internal server error"})})))
 
 (defn blog-links-handler [request]
   (log/info "Fetching blog links")
@@ -74,12 +91,12 @@
       (log/info "Blog links fetched successfully" config)
       {:status 200
        :headers {"Content-Type" "application/json"}
-       :body (json/generate-string (:rss-urls config))})
+       :body (write-transit (:rss-urls config))})
     (catch Exception e
       (log/error e "Error fetching blog links" e)
       {:status 500
        :headers {"Content-Type" "application/json"}
-       :body (json/generate-string {:error "Internal server error"})})))
+       :body (write-transit {:error "Internal server error"})})))
 
 (def routes
   (route/expand-routes
@@ -93,3 +110,7 @@
    ::http/resource-path "/public"
    ::http/type :jetty
    ::http/port 3000})
+
+;; Entry point
+(defn -main []
+  (http/start (http/create-server service)))

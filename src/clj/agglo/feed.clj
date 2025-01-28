@@ -1,110 +1,14 @@
 (ns agglo.feed
-  (:import [com.sun.syndication.io SyndFeedInput XmlReader]
-           [java.net URL]
-           [java.io ByteArrayInputStream])
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.edn :as edn]
-            [clj-http.client :as client]))
-
-(defrecord feed [authors author categories contributors copyright description
-                 encoding entries feed-type image language link entry-links
-                 published-date title uri])
-
-(defrecord entry [authors author categories contents contributors description
-                  enclosures link published-date title updated-date url])
-
-(defrecord enclosure [length type uri])
-(defrecord person    [email name uri])
-(defrecord category  [name taxonomy-uri])
-(defrecord content   [type value])
-(defrecord image     [description link title url])
-(defrecord link      [href hreflang length rel title type])
-
-(defn- obj->enclosure [e]
-  (map->enclosure {:length (.getLength e)
-                   :type   (.getType e)
-                   :url    (.getUrl e)}))
-
-(defn- obj->content [c]
-  (map->content {:type  (.getType c)
-                 :value (.getValue c)}))
-
-(defn- obj->link [l]
-  (map->link {:href     (.getHref l)
-              :hreflang (.getHreflang l)
-              :length   (.getLength l)
-              :rel      (.getRel l)
-              :title    (.getTitle l)
-              :type     (.getType l)}))
-
-(defn- obj->category [c]
-  (map->category {:name         (.getName c)
-                  :taxonomy-uri (.getTaxonomyUri c)}))
-
-(defn- obj->person [sp]
-  (map->person {:email (.getEmail sp)
-                :name  (.getName sp)
-                :uri   (.getUri sp)}))
-
-(defn- obj->image [i]
-  (map->image {:description (.getDescription i)
-               :link        (.getLink i)
-               :title       (.getTitle i)
-               :url         (.getUrl i)}))
-
-(defn- obj->entry [e]
-  (map->entry {:authors        (map obj->person    (seq (.getAuthors e)))
-               :categories     (map obj->category  (seq (.getCategories e)))
-               :contents       (map obj->content   (seq (.getContents e)))
-               :contributors   (map obj->person    (seq (.getContributors e)))
-               :enclosures     (map obj->enclosure (seq (.getEnclosures e)))
-               :description    (or (if-let [d (.getDescription e)] (obj->content d))
-                                   (first (map obj->content (seq (.getContents e)))))
-               :author         (.getAuthor e)
-               :link           (.getLink e)
-               :published-date (.getPublishedDate e)
-               :title          (.getTitle e)
-               :updated-date   (.getUpdatedDate e)
-               :uri            (.getUri e)}))
-
-(defn- obj->feed [f]
-  (map->feed  {:authors        (map obj->person   (seq (.getAuthors f)))
-               :categories     (map obj->category (seq (.getCategories f)))
-               :contributors   (map obj->person   (seq (.getContributors f)))
-               :entries        (map obj->entry    (seq (.getEntries f)))
-               :entry-links    (map obj->link     (seq (.getLinks f)))
-               :image          (if-let [i (.getImage f)] (obj->image i))
-               :author         (.getAuthor f)
-               :copyright      (.getCopyright f)
-               :description    (.getDescription f)
-               :encoding       (.getEncoding f)
-               :feed-type      (.getFeedType f)
-               :language       (.getLanguage f)
-               :link           (.getLink f)
-               :published-date (.getPublishedDate f)
-               :title          (.getTitle f)
-               :uri            (.getUri f)}))
-
-(defn- parse-internal [xmlreader]
-  (let [feedinput (SyndFeedInput.)
-        syndfeed  (.build feedinput xmlreader)]
-    (obj->feed syndfeed)))
-
-(defn ->url [s]
-  (if (string? s) (URL. s) s))
-
-(defn parse-feed
-  ([feedsource]
-   (parse-internal (XmlReader. (->url feedsource))))
-  ([feedsource content-type]
-   (parse-internal (XmlReader. (->url feedsource) content-type)))
-  ([feedsource content-type lenient]
-   (parse-internal (XmlReader. (->url feedsource) content-type lenient)))
-  ([feedsource content-type lenient default-encoding]
-   (parse-internal (XmlReader. (->url feedsource) content-type lenient default-encoding))))
+            [clj-http.client :as client]
+            [buran.core :refer [consume shrink]]
+            [clojure.walk :refer [postwalk]])
+  (:import (org.jdom2 Element)))
 
 (defn load-config []
+  "Loads the configuration from resources/config.edn."
   (try
     (let [config-file-path "resources/config.edn"
           config-file (io/file config-file-path)]
@@ -115,34 +19,76 @@
             (log/info "Config loaded:" config)
             config))
         (do
-          (log/error "Config file not found")
+          (log/error "Config file not found at" config-file-path)
           {})))
     (catch Exception e
-      (log/error e "Error loading config")
+      (log/error e "Error loading config" e)
       {})))
 
+(defn remove-jdom-elements [data]
+  "Remove JDOM elements from the data recursively."
+  (postwalk (fn [x]
+              (cond
+                (instance? Element x) nil
+                (instance? java.util.Map x) (into {} (remove (fn [[k v]] (instance? Element v)) x))
+                (instance? java.util.List x) (vec (remove #(instance? Element %) x))
+                :else x))
+            data))
+
+(defn sanitize-feed [feed]
+  "Sanitizes the feed data by removing JDOM elements and foreign markup."
+  (-> feed
+      remove-jdom-elements
+      (update :entries
+              (fn [entries]
+                (map (fn [entry]
+                       (-> entry
+                           (dissoc :foreign-markup)
+                           (update :description
+                                   (fn [desc]
+                                     (if (map? desc)
+                                       (get desc :value desc)
+                                       desc)))))
+                     entries)))))
+
 (defn fetch-feed [url]
+  "Fetches a feed from the given URL and returns it as a Clojure data structure."
   (log/info "Fetching feed from URL:" url)
   (try
-    (let [response (client/get url {:as :string :socket-timeout 5000 :conn-timeout 5000})
+    (let [response (client/get url {:as :string})
           body (:body response)]
-      (log/info "Feed fetched successfully from" url)
-      (with-open [stream (ByteArrayInputStream. (.getBytes body "UTF-8"))]
-        (parse-internal (XmlReader. stream))))
+      (log/info "Fetched feed body from URL:" url "\n" body)
+      (let [feed (shrink (consume body))
+            channel-title (get-in feed [:rss :channel :title 0])
+            entries (get-in feed [:rss :channel :item])]
+        (log/info "Channel title:" channel-title)
+        (log/info "Parsed feed entries:" entries)
+        {:title channel-title
+         :entries (map (fn [entry]
+                         {:title (get-in entry ["title" 0])
+                          :link (get-in entry ["link" 0])
+                          :description (get-in entry ["description" 0])
+                          :pubDate (get-in entry ["pubDate" 0])
+                          :guid (get-in entry ["guid" 0])
+                          :categories (mapv #(get % :content) (get entry "category"))})
+                       entries)}))
     (catch Exception e
-      (log/error e "Error fetching feed from URL" url e)
+      (log/error e "Error fetching feed from URL:" url)
       nil)))
 
 (defn fetch-feeds []
-  (try
-    (let [config (load-config)
-          feed-urls (:rss-urls config)]
-      (log/info "Feed URLs to fetch:" feed-urls)
-      (let [feeds (map fetch-feed feed-urls)]
-        (log/info "Feeds fetched, now parsing")
-        (let [parsed-feeds (filter some? (mapcat #(take 1 (:entries %)) feeds))]
-          (log/info "Parsed feeds:" parsed-feeds)
-          parsed-feeds)))
-    (catch Exception e
-      (log/error e "Error fetching or parsing feeds")
-      [])))
+  "Fetches multiple feeds based on URLs from the config file."
+  (let [config (load-config)
+        urls (:rss-urls config)
+        feeds (map fetch-feed urls)]
+    (log/info "Fetched feeds data:" feeds)
+    feeds))
+
+(defn main []
+  (log/info "Starting feed processing")
+  (let [feeds (fetch-feeds)]
+    (log/info "Feeds fetched:" feeds)
+    ;; Aqui você pode adicionar lógica para manipular os feeds como necessário
+    ))
+
+(main)
