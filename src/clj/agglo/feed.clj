@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [clojure.edn :as edn]
             [clj-http.client :as client]
-            [buran.core :refer [consume shrink]]
+            [buran.core :refer [consume shrink]]  ;; Uso correto do buran
             [clojure.walk :refer [postwalk]])
   (:import (org.jdom2 Element)))
 

@@ -67,9 +67,9 @@
    (copy-resources)
    (build-cljs)
    (with-pass-thru _
-     (future (http/start (http/create-server service)))
+     (http/start (http/create-server service))
      (println "Server is running at http://localhost:3000")
-     @(promise))))
+     (Thread/sleep Long/MAX_VALUE))))  ;; Mantém o servidor em execução
 
 (deftask build
   "Build the project."
