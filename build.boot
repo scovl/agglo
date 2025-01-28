@@ -8,7 +8,6 @@
                  [io.pedestal/pedestal.jetty "0.5.9"]
                  [clj-http "3.12.3"]
                  [cheshire "5.10.1"]
-                 [com.rometools/rome "2.0.0-SNAPSHOT"]
                  [org.clojure/data.zip "0.1.3"]
                  [org.clojure/tools.cli "1.0.206"]
                  [adzerk/boot-cljs "2.1.5"]
