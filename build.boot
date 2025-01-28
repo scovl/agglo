@@ -20,7 +20,7 @@
                  [org.clojure/core.async "1.3.618"]
                  [org.clojure/tools.logging "1.2.4"]
                  [log4j/log4j "1.2.17"]
-                 [buran "0.4.0"]])  ;; Adicione a dependência aqui
+                 [buran "0.1.4"]])  ;; Adicione a dependência aqui
 
 (require '[boot.core :refer :all]
          '[boot.task.built-in :refer :all]
