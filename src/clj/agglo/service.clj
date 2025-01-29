@@ -26,23 +26,26 @@
 (defn render-home-page [html-content feeds]
   (try
     (log/info "Rendering home page with feeds:" feeds)
-    (-> html-content
-        (str/replace "{{feeds}}"
-                     (apply str
-                            (map (fn [{:keys [title link description]}]
-                                   (let [description-text (if (map? description)
-                                                            (:value description)
-                                                            description)]
-                                     (format "<div class='feed'>
-                                               <h2><a href='%s'>%s</a></h2>
-                                               <div>%s</div>
-                                              </div>"
-                                             (or link "#") (or title "No title") (or description-text "No description"))))
-                                 feeds)))))
+    (let [updated-content
+          (str/replace html-content
+                       "{{feeds}}"
+                       (apply str
+                              (map (fn [{:keys [title link description]}]
+                                     (let [description-text (if (map? description)
+                                                              (:value description)
+                                                              description)]
+                                       (format "<div class='feed'>
+                                                 <h2><a href='%s'>%s</a></h2>
+                                                 <div>%s</div>
+                                                </div>"
+                                               (or link "#") (or title "No title") (or description-text "No description"))))
+                                   feeds)))]
+      updated-content)  ;; Retorna o conteúdo modificado dentro do `try`
 
     (catch Exception e
-      (log/error e "Error rendering home page" e)
+      (log/error e "Error rendering home page")
       "Internal server error")))
+
 
 
 (defn home-page-handler [request]
