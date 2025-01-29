@@ -55,28 +55,34 @@
   "Fetches a feed using Buran and extracts useful data."
   (log/info "Fetching feed from URL:" url)
   (try
-    (let [raw-feed (consume-http url)  ;; Usa Buran diretamente para pegar o feed
-          feed (shrink raw-feed)]  ;; Limpa a estrutura do feed
+    (let [raw-feed (consume-http url)
+          feed (shrink raw-feed)]
 
-      ;; LOG para inspecionar a estrutura do feed
+      ;; LOG para depuração
       (log/info "Raw feed data (before shrink):" raw-feed)
       (log/info "Feed data (after shrink):" feed)
 
-      ;; Verifica o tipo do feed e ajusta os campos de acordo com RSS/Atom
+      ;; Verifica se o feed tem título e entradas
       (let [{:keys [info entries]} feed
             feed-title (:title info "Untitled Feed")]
         
         {:title feed-title
          :entries (map (fn [entry]
-                         {:title (or (:title entry) "No title")
-                          :link (or (:link entry) "#")
-                          :description (or (get-in entry [:description :value]) "No description")
-                          :pubDate (or (:published-date entry) "No date")})
+                         (let [description-text (or (get-in entry [:description :value])
+                                                    (:description entry)
+                                                    (:summary entry)
+                                                    (:content entry)
+                                                    "No description")]
+                           {:title (or (:title entry) "No title")
+                            :link (or (:link entry) "#")
+                            :description description-text
+                            :pubDate (or (:published-date entry) "No date")}))
                        entries)}))
 
     (catch Exception e
       (log/error e "Error fetching feed from URL:" url)
       nil)))
+
 
 
 
