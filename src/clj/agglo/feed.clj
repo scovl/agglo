@@ -57,15 +57,18 @@
   (try
     (let [response (client/get url {:as :string})
           body (:body response)
-          feed (shrink (consume body))]
+          raw-feed (consume body)  ;; Consome o feed sem shrink para inspecionar a estrutura
+          feed (shrink raw-feed)]  ;; Simplifica a estrutura do feed
 
-      ;; LOG para inspecionar a estrutura do feed
-      (log/info "Raw feed data:" feed)
+      ;; LOG para inspecionar a estrutura do feed antes e depois do shrink
+      (log/info "Raw feed data (before shrink):" raw-feed)
+      (log/info "Feed data (after shrink):" feed)
 
+      ;; Extrai os dados do feed
       (let [channel (get-in feed [:rss :channel])
             channel-title (get-in channel [:title 0])
             entries (get-in channel [:item])]
-        
+
         ;; LOG para verificar os valores extraídos
         (log/info "Extracted channel title:" channel-title)
         (log/info "Extracted entries:" entries)
