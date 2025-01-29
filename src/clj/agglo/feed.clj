@@ -70,11 +70,13 @@
 
         {:title feed-title
          :entries (map (fn [entry]
-                         (let [description-text (or (get-in entry [:description :value]) ;; Atom
-                                                    (:description entry)                ;; RSS
-                                                    (get-in entry [:content :value])   ;; Atom (content HTML)
-                                                    (:summary entry)                    ;; Algumas variações de Atom
-                                                    "No description")]
+        (let [description-text (or (get-in entry [:description :value]) ;; Atom
+                                  (:description entry)                ;; RSS
+                                  (get-in entry [:content :value])   ;; Atom (content HTML)
+                                  (:summary entry)                    ;; Algumas variações de Atom
+                                  (when (map? (:description entry))
+                                    (pr-str (:description entry)))  ;; Se for um mapa, serializar
+                                  "No description")]
                            {:title (or (:title entry) "No title")
                             :link (or (:link entry) "#")
                             :description description-text
@@ -85,6 +87,9 @@
       (log/error e "Error fetching feed from URL:" url)
       {:title "Error fetching feed"
        :entries []})))  ;; Retorna um feed vazio em caso de erro
+
+(println (feed/fetch-feeds))
+
 
 ;; Busca múltiplos feeds com base nas URLs do config.edn
 (defn fetch-feeds []

@@ -28,24 +28,33 @@
     (log/info "Rendering home page with feeds:" feeds)
     (let [updated-content
           (str/replace html-content
-                       "{{feeds}}"
-                       (apply str
-                              (map (fn [{:keys [title link description]}]
-                                     (let [description-text (if (map? description)
-                                                              (:value description)
-                                                              description)]
-                                       (format "<div class='feed'>
-                                                 <h2><a href='%s'>%s</a></h2>
-                                                 <div>%s</div>
-                                                </div>"
-                                               (or link "#") (or title "No title") (or description-text "No description"))))
-                                   feeds)))]
+             "{{feeds}}"
+             (apply str
+                    (map (fn [{:keys [title link description]}]
+                           (let [description-text (if (map? description)
+                                                    (:value description)
+                                                    description)]
+                             (format "<div class='feed'>
+                                        <h2><a href='%s'>%s</a></h2>
+                                        <div>%s</div>
+                                      </div>"
+                                     (or link "#") (or title "No title") (or description-text "No description"))))
+                         feeds)))]
       updated-content)  ;; Retorna o conteúdo modificado dentro do `try`
 
     (catch Exception e
       (log/error e "Error rendering home page")
       "Internal server error")))
 
+(let [feed-html (apply str
+                       (map (fn [{:keys [title link description]}]
+                              (format "<div class='feed'>
+                                         <h2><a href='%s'>%s</a></h2>
+                                         <div>%s</div>
+                                       </div>"
+                                      (or link "#") (or title "No title") (or description "No description")))
+                            (or feeds [])))]
+  (str/replace html-content "{{feeds}}" feed-html))
 
 
 (defn home-page-handler [request]
