@@ -65,6 +65,7 @@
       (let [channel (:channel feed)
             channel-title (:title channel)
             entries (:item channel)]
+            (log/info "Feed parsed structure:" feed)
 
         ;; LOG para verificar os valores extraídos
         (log/info "Extracted channel title:" channel-title)
