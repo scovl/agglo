@@ -88,8 +88,6 @@
       {:title "Error fetching feed"
        :entries []})))  ;; Retorna um feed vazio em caso de erro
 
-(println (feed/fetch-feeds))
-
 
 ;; Busca múltiplos feeds com base nas URLs do config.edn
 (defn fetch-feeds []
