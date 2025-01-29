@@ -59,19 +59,19 @@
           body (:body response)]
       (log/info "Fetched feed body from URL:" url "\n" body)
       (let [feed (shrink (consume body))
-            channel-title (get-in feed [:rss :channel :title 0])
-            entries (get-in feed [:rss :channel :item])]
-        (log/info "Channel title:" channel-title)
-        (log/info "Parsed feed entries:" entries)
-        {:title (or channel-title "Untitled Feed")
-          :entries (map (fn [entry]
-                          {:title (or (:title entry) "No title")
-                            :link (or (:link entry) "#")
-                            :description (or (:description entry) "No description")
-                            :pubDate (or (:pubDate entry) "No date")
-                            :guid (or (:guid entry) "No GUID")
-                            :categories (mapv #(get % :content) (:category entry))})
-                        entries)})
+      channel-title (:title (:channel (:rss feed))) ;; Obtendo o título do canal corretamente
+      entries (:item (:channel (:rss feed)))]
+  (log/info "Channel title:" channel-title)
+  (log/info "Parsed feed entries:" entries)
+  {:title (or channel-title "Untitled Feed")
+   :entries (map (fn [entry]
+                   {:title (or (:title entry) "No title")
+                    :link (or (:link entry) "#")
+                    :description (or (:description entry) "No description")
+                    :pubDate (or (:pubDate entry) "No date")
+                    :guid (or (:guid entry) "No GUID")
+                    :categories (mapv #(get % :content) (:category entry))})
+                 entries)})
     (catch Exception e
       (log/error e "Error fetching feed from URL:" url)
       nil)))
