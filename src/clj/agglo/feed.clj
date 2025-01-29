@@ -68,10 +68,10 @@
         
         {:title feed-title
          :entries (map (fn [entry]
-                         (let [description-text (or (get-in entry [:description :value])
-                                                    (:description entry)
-                                                    (:summary entry)
-                                                    (:content entry)
+                         (let [description-text (or (get-in entry [:description :value])   ;; Atom
+                                                    (:description entry)                 ;; RSS
+                                                    (get-in entry [:content :value])    ;; Atom (content HTML)
+                                                    (:summary entry)                     ;; Algumas variações de Atom
                                                     "No description")]
                            {:title (or (:title entry) "No title")
                             :link (or (:link entry) "#")
@@ -82,6 +82,7 @@
     (catch Exception e
       (log/error e "Error fetching feed from URL:" url)
       nil)))
+
 
 
 
