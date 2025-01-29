@@ -38,10 +38,12 @@
                                                <div>%s</div>
                                               </div>"
                                              (or link "#") (or title "No title") (or description-text "No description"))))
-                                 feeds))))
+                                 feeds)))))
+
     (catch Exception e
       (log/error e "Error rendering home page" e)
       "Internal server error")))
+
 
 (defn home-page-handler [request]
   (try

@@ -52,38 +52,32 @@
                      entries)))))
 
 (defn fetch-feed [url]
-  "Fetches a feed from the given URL and returns it as a Clojure data structure."
+  "Fetches a feed using Buran and extracts useful data."
   (log/info "Fetching feed from URL:" url)
   (try
-    (let [response (client/get url {:as :string})
-          body (:body response)
-          raw-feed (consume body)  ;; Consome o feed sem shrink para inspecionar a estrutura
-          feed (shrink raw-feed)]  ;; Simplifica a estrutura do feed
+    (let [raw-feed (consume-http url)  ;; Usa Buran diretamente para pegar o feed
+          feed (shrink raw-feed)]  ;; Limpa a estrutura do feed
 
-      ;; LOG para inspecionar a estrutura do feed antes e depois do shrink
+      ;; LOG para inspecionar a estrutura do feed
       (log/info "Raw feed data (before shrink):" raw-feed)
       (log/info "Feed data (after shrink):" feed)
 
-      ;; Extrai os dados do feed
-      (let [channel (get-in feed [:rss :channel])
-            channel-title (get-in channel [:title 0])
-            entries (get-in channel [:item])]
-
-        ;; LOG para verificar os valores extraídos
-        (log/info "Extracted channel title:" channel-title)
-        (log/info "Extracted entries:" entries)
-
-        {:title (or channel-title "Untitled Feed")
+      ;; Verifica o tipo do feed e ajusta os campos de acordo com RSS/Atom
+      (let [{:keys [info entries]} feed
+            feed-title (:title info "Untitled Feed")]
+        
+        {:title feed-title
          :entries (map (fn [entry]
-                         {:title (or (get-in entry ["title" 0]) "No title")
-                          :link (or (get-in entry ["link" 0]) "#")
-                          :description (or (get-in entry ["description" 0]) "No description")
-                          :pubDate (or (get-in entry ["pubDate" 0]) "No date")})
+                         {:title (or (:title entry) "No title")
+                          :link (or (:link entry) "#")
+                          :description (or (get-in entry [:description :value]) "No description")
+                          :pubDate (or (:published-date entry) "No date")})
                        entries)}))
 
     (catch Exception e
       (log/error e "Error fetching feed from URL:" url)
       nil)))
+
 
 
 
