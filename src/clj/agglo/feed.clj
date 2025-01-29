@@ -62,21 +62,20 @@
       ;; LOG para inspecionar a estrutura do feed
       (log/info "Raw feed data:" feed)
 
-      (let [channel (:channel feed)
-            channel-title (:title channel)
-            entries (:item channel)]
-            (log/info "Feed parsed structure:" feed)
-
+      (let [channel (get-in feed [:rss :channel])
+            channel-title (get-in channel [:title 0])
+            entries (get-in channel [:item])]
+        
         ;; LOG para verificar os valores extraídos
         (log/info "Extracted channel title:" channel-title)
         (log/info "Extracted entries:" entries)
 
         {:title (or channel-title "Untitled Feed")
          :entries (map (fn [entry]
-                         {:title (or (:title entry) "No title")
-                          :link (or (:link entry) "#")
-                          :description (or (:description entry) "No description")
-                          :pubDate (or (:pubDate entry) "No date")})
+                         {:title (or (get-in entry ["title" 0]) "No title")
+                          :link (or (get-in entry ["link" 0]) "#")
+                          :description (or (get-in entry ["description" 0]) "No description")
+                          :pubDate (or (get-in entry ["pubDate" 0]) "No date")})
                        entries)}))
 
     (catch Exception e
