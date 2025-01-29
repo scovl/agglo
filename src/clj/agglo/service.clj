@@ -46,16 +46,6 @@
       (log/error e "Error rendering home page")
       "Internal server error")))
 
-(let [feed-html (apply str
-                       (map (fn [{:keys [title link description]}]
-                              (format "<div class='feed'>
-                                         <h2><a href='%s'>%s</a></h2>
-                                         <div>%s</div>
-                                       </div>"
-                                      (or link "#") (or title "No title") (or description "No description")))
-                            (or feeds [])))]
-  (str/replace html-content "{{feeds}}" feed-html))
-
 
 (defn home-page-handler [request]
   (try
