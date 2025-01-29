@@ -56,25 +56,28 @@
   (log/info "Fetching feed from URL:" url)
   (try
     (let [response (client/get url {:as :string})
-          body (:body response)]
-      (log/info "Fetched feed body from URL:" url "\n" body)
-      (let [feed (shrink (consume body))
-      channel-title (:title (:channel (:rss feed))) ;; Obtendo o título do canal corretamente
-      entries (:item (:channel (:rss feed)))]
-  (log/info "Channel title:" channel-title)
-  (log/info "Parsed feed entries:" entries)
-  {:title (or channel-title "Untitled Feed")
-   :entries (map (fn [entry]
-                   {:title (or (:title entry) "No title")
-                    :link (or (:link entry) "#")
-                    :description (or (:description entry) "No description")
-                    :pubDate (or (:pubDate entry) "No date")
-                    :guid (or (:guid entry) "No GUID")
-                    :categories (mapv #(get % :content) (:category entry))})
-                 entries)})
+          body (:body response)
+          feed (shrink (consume body))
+          channel-title (:title (:channel (:rss feed))) ;; Obtendo o título do canal corretamente
+          entries (:item (:channel (:rss feed)))] 
+
+      (log/info "Channel title:" channel-title)
+      (log/info "Parsed feed entries:" entries)
+
+      {:title (or channel-title "Untitled Feed")
+       :entries (map (fn [entry]
+                       {:title (or (:title entry) "No title")
+                        :link (or (:link entry) "#")
+                        :description (or (:description entry) "No description")
+                        :pubDate (or (:pubDate entry) "No date")
+                        :guid (or (:guid entry) "No GUID")
+                        :categories (mapv #(get % :content) (:category entry))})
+                     entries)})
+    
     (catch Exception e
       (log/error e "Error fetching feed from URL:" url)
       nil)))
+
 
 (defn fetch-feeds []
   "Fetches multiple feeds based on URLs from the config file."
