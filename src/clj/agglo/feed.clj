@@ -3,27 +3,33 @@
             [clojure.tools.logging :as log]
             [clojure.edn :as edn]
             [clj-http.client :as client]
-            [buran.core :refer [consume consume-http shrink]]  ;; Uso correto do buran
-            [clojure.walk :refer [postwalk]])
-  (:import (org.jdom2 Element)))
+            [buran.core :as buran]
+            [clojure.walk :refer [postwalk]]
+            [clojure.string :as str]
+            [clj-http.client :as http]
+            [clojure.xml :as xml]
+            [clojure.zip :as zip]
+            [clojure.data.zip.xml :as zip-xml]
+            [clojure.java.io :as io])
+  (:import (org.jdom2 Element)
+           (java.io ByteArrayInputStream)))
 
 ;; Carrega as configurações do arquivo config.edn
 (defn load-config []
   (try
-    (let [config-file-path "resources/config.edn"
-          config-file (io/file config-file-path)]
-      (if (.exists config-file)
+    (let [config-file "resources/config.edn"]
+      (log/info "Loading config from" config-file)
+      (if (.exists (io/file config-file))
         (do
-          (log/info "Loading config from" config-file-path)
           (let [config (edn/read-string (slurp config-file))]
-            (log/info "Config loaded:" config)
+            (log/info "Config loaded successfully:" config)
             config))
         (do
-          (log/error "Config file not found at" config-file-path)
-          {})))
+          (log/warn "Config file not found, using default configuration")
+          {:rss-urls ["https://hnrss.org/frontpage"]})))
     (catch Exception e
-      (log/error e "Error loading config" e)
-      {})))
+      (log/error e "Error loading config, using default configuration")
+      {:rss-urls ["https://hnrss.org/frontpage"]})))
 
 ;; Remove elementos JDOM do feed processado
 (defn remove-jdom-elements [data]
@@ -52,54 +58,108 @@
                                        :else "No description")))))
                      (or entries [])))))) ;; Garante que entries nunca seja nil
 
-;; Busca um feed usando Buran e extrai os dados
-(defn fetch-feed [url]
-  (log/info "Fetching feed from URL:" url)
+;; Helper function to truncate text
+(defn truncate-text [text max-length]
+  (if (and text (> (count text) max-length))
+    (str (subs text 0 max-length) "...")
+    text))
+
+(defn xml->map [xml-str]
   (try
-    (let [raw-feed (consume-http url)
-          feed (shrink raw-feed)]
-
-      ;; LOG para depuração
-      (log/info "Raw feed data (before shrink):" raw-feed)
-      (log/info "Feed data (after shrink):" feed)
-
-      ;; Verifica se o feed tem título e entradas
-      (let [info (get feed :info {})
-            entries (or (get feed :entries) [])
-            feed-title (or (:title info) "Untitled Feed")]
-
-        {:title feed-title
-         :entries (map (fn [entry]
-        (let [description-text (or (get-in entry [:description :value]) ;; Atom
-                                  (:description entry)                ;; RSS
-                                  (get-in entry [:content :value])   ;; Atom (content HTML)
-                                  (:summary entry)                    ;; Algumas variações de Atom
-                                  (when (map? (:description entry))
-                                    (pr-str (:description entry)))  ;; Se for um mapa, serializar
-                                  "No description")]
-                           {:title (or (:title entry) "No title")
-                            :link (or (:link entry) "#")
-                            :description description-text
-                            :pubDate (or (:published-date entry) "No date")})) 
-                       entries)}))
-
+    (-> xml-str
+        .getBytes
+        java.io.ByteArrayInputStream.
+        xml/parse
+        zip/xml-zip)
     (catch Exception e
-      (log/error e "Error fetching feed from URL:" url)
-      {:title "Error fetching feed"
-       :entries []})))  ;; Retorna um feed vazio em caso de erro
+      (log/error e "Failed to parse XML")
+      nil)))
 
+(defn extract-text [content]
+  (if (string? content)
+    content
+    (str/join " " (map extract-text (:content content)))))
 
-;; Busca múltiplos feeds com base nas URLs do config.edn
+(defn parse-rss-item [item-loc]
+  {:title (zip-xml/xml1-> item-loc :title zip-xml/text)
+   :link (zip-xml/xml1-> item-loc :link zip-xml/text)
+   :description (zip-xml/xml1-> item-loc :description zip-xml/text)
+   :pubDate (zip-xml/xml1-> item-loc :pubDate zip-xml/text)
+   :categories (zip-xml/xml-> item-loc :category zip-xml/text)})
+
+(defn parse-rss [xml-str]
+  (when-let [xml-zip (xml->map xml-str)]
+    (let [channel (zip-xml/xml1-> xml-zip :channel)]
+      {:title (zip-xml/xml1-> channel :title zip-xml/text)
+       :entries (vec (map parse-rss-item
+                         (zip-xml/xml-> channel :item)))})))
+
+(defn fetch-url [url]
+  (try
+    (log/info "Fetching URL:" url)
+    (let [response (http/get url {:as :string
+                                 :socket-timeout 10000
+                                 :connection-timeout 10000})]
+      (log/info "Response status:" (:status response))
+      (when (= 200 (:status response))
+        (:body response)))
+    (catch Exception e
+      (log/error e "Failed to fetch URL:" url)
+      nil)))
+
+(defn parse-xml [xml-str]
+  (try
+    (log/info "Parsing XML string of length:" (count xml-str))
+    (-> xml-str
+        (.getBytes "UTF-8")
+        ByteArrayInputStream.
+        xml/parse)
+    (catch Exception e
+      (log/error e "Failed to parse XML")
+      nil)))
+
+(defn extract-feed-data [xml-data]
+  (try
+    (when xml-data
+      (let [channel (first (filter #(= :channel (:tag %)) 
+                                 (-> xml-data :content)))
+            items (filter #(= :item (:tag %)) 
+                         (:content channel))
+            get-content (fn [item tag]
+                         (some->> item
+                                :content
+                                (filter #(= tag (:tag %)))
+                                first
+                                :content
+                                first))]
+        
+        (log/info "Found" (count items) "items in feed")
+        
+        {:title (get-content channel :title)
+         :entries (vec (for [item items]
+                        {:title (get-content item :title)
+                         :link (get-content item :link)
+                         :description (get-content item :description)
+                         :pubDate (get-content item :pubDate)}))}))
+    (catch Exception e
+      (log/error e "Failed to extract feed data")
+      {:title "Error parsing feed" :entries []})))
+
+(defn fetch-feed [url]
+  (log/info "Processing feed from URL:" url)
+  (if-let [xml-str (fetch-url url)]
+    (if-let [xml-data (parse-xml xml-str)]
+      (let [feed-data (extract-feed-data xml-data)]
+        (log/info "Successfully extracted feed data:" feed-data)
+        feed-data)
+      {:title "Error parsing feed" :entries []})
+    {:title "Error fetching feed" :entries []}))
+
 (defn fetch-feeds []
   (let [config (load-config)
         urls (:rss-urls config)]
-    (if (seq urls)
-      (do
-        (log/info "Fetching feeds for URLs:" urls)
-        (map fetch-feed urls))
-      (do
-        (log/warn "No URLs found in config")
-        [])))) ;; Retorna uma lista vazia caso não haja URLs
+    (log/info "Fetching feeds from URLs:" urls)
+    (vec (map fetch-feed urls))))
 
 ;; Função principal para iniciar o processamento dos feeds
 (defn main []
