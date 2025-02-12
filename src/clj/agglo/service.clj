@@ -5,12 +5,13 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.string :as str]
-            [agglo.feed :as feed])
-  (:import (java.io ByteArrayOutputStream ByteArrayInputStream)
-           (org.apache.log4j PropertyConfigurator)))
+            [agglo.feed :as feed]
+            [selmer.parser :as selmer])
+  (:import (java.io ByteArrayOutputStream ByteArrayInputStream)))
 
-;; Inicializar Log4j
-(PropertyConfigurator/configure (io/resource "log4j.properties"))
+(let [logs-dir (io/file "logs")]
+  (when-not (.exists logs-dir)
+    (.mkdirs logs-dir)))
 
 (defn write-transit [data]
   (let [out (ByteArrayOutputStream.)
@@ -46,6 +47,73 @@
       (log/error e "Error rendering home page")
       "Internal server error")))
 
+(defn render-feed [_]
+  (log/info "Starting render-feed handler")
+  (try
+    (log/info "Fetching feeds...")
+    (let [feeds (feed/fetch-feeds)]
+      (log/info "Feeds fetched:" feeds)
+      (log/info "Loading template...")
+      (let [html-file-path "resources/public/index.html"
+            html-file (io/file html-file-path)]
+        (log/info "HTML file path:" html-file-path)
+        (if (.exists html-file)
+          (do
+            (log/info "HTML file found, loading content")
+            (let [content (slurp html-file)
+                  rendered (selmer/render content {:feeds feeds})]
+              (log/info "Template rendered successfully")
+              {:status 200
+               :headers {"Content-Type" "text/html; charset=utf-8"}
+               :body rendered}))
+          (do
+            (log/error "HTML file not found at" html-file-path)
+            {:status 500
+             :headers {"Content-Type" "text/html"}
+             :body "Template file not found"}))))
+    (catch Exception e
+      (log/error e "Error in render-feed:")
+      {:status 500
+       :headers {"Content-Type" "text/html"}
+       :body (str "Internal server error: " (.getMessage e))})))
+
+(defn feeds-handler [request]
+  (log/info "Fetching feeds")
+  (try
+    (let [feeds-data (feed/fetch-feeds)]
+      (log/info "Feeds fetched successfully" feeds-data)
+      {:status 200
+       :headers {"Content-Type" "application/json; charset=utf-8"}
+       :body (write-transit feeds-data)})
+    (catch Exception e
+      (log/error e "Error fetching feeds" e)
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (write-transit {:error "Internal server error"})})))
+
+(defn blog-links-handler [request]
+  (log/info "Fetching blog links")
+  (try
+    (let [config (feed/load-config)]
+      (log/info "Blog links fetched successfully" config)
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (write-transit (:rss-urls config))})
+    (catch Exception e
+      (log/error e "Error fetching blog links" e)
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (write-transit {:error "Internal server error"})})))
+
+(def routes
+  #{["/" :get render-feed :route-name :index]
+    ["/feeds" :get feeds-handler :route-name :feeds]
+    ["/blog-links" :get blog-links-handler :route-name :blog-links]})
+
+(def service
+  {::http/routes routes
+   ::http/type :jetty
+   ::http/port 8080})
 
 (defn home-page-handler [request]
   (try
@@ -73,47 +141,6 @@
       {:status 500
        :headers {"Content-Type" "application/json"}
        :body (write-transit {:error "Internal server error"})})))
-
-(defn feeds-handler [request]
-  (log/info "Fetching feeds")
-  (try
-    (let [feeds-data (feed/fetch-feeds)]  ;; Corrigido aqui
-      (log/info "Feeds fetched successfully" feeds-data)
-      {:status 200
-       :headers {"Content-Type" "application/json; charset=utf-8"}
-       :body (write-transit feeds-data)})
-    (catch Exception e
-      (log/error e "Error fetching feeds" e)
-      {:status 500
-       :headers {"Content-Type" "application/json"}
-       :body (write-transit {:error "Internal server error"})})))
-
-(defn blog-links-handler [request]
-  (log/info "Fetching blog links")
-  (try
-    (let [config (feed/load-config)]
-      (log/info "Blog links fetched successfully" config)
-      {:status 200
-       :headers {"Content-Type" "application/json"}
-       :body (write-transit (:rss-urls config))})
-    (catch Exception e
-      (log/error e "Error fetching blog links" e)
-      {:status 500
-       :headers {"Content-Type" "application/json"}
-       :body (write-transit {:error "Internal server error"})})))
-
-(def routes
-  (route/expand-routes
-   #{["/" :get home-page-handler :route-name :home]
-     ["/feeds" :get feeds-handler :route-name :feeds]
-     ["/blog-links" :get blog-links-handler :route-name :blog-links]}))
-
-(def service
-  {:env :prod
-   ::http/routes routes
-   ::http/resource-path "/public"
-   ::http/type :jetty
-   ::http/port 3000})
 
 ;; Entry point
 (defn -main []
