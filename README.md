@@ -1,7 +1,3 @@
-Aqui está o README atualizado para usar Boot ao invés de `deps.edn` e `clj`:
-
----
-
 # Agglo
 
 Agglo is a blog aggregator (a planet) that aggregates and displays updates from various blogs as feeds on specific topics.
@@ -29,24 +25,39 @@ Agglo is a blog aggregator (a planet) that aggregates and displays updates from 
 
    Boot will automatically download and install the necessary dependencies when you run the tasks.
 
+### Configuration
+
+The application uses two main configuration files:
+
+1. **`resources/config.edn`**: Contains RSS feed URLs and other application settings
+2. **`resources/logback.xml`**: Configures logging behavior for both console and file output
+
+Logs are written to `logs/app.log`.
+
 ### Running the Application
 
-To start the application, execute:
+To start the application in development mode with auto-reload:
+
+```bash
+boot dev
+```
+
+Or for a simple run:
 
 ```bash
 boot run
 ```
 
-This will start a web server at `http://localhost:3000`.
+This will start a web server at `http://localhost:8080`.
 
 ### API Endpoints
 
-- **`GET /`**: Welcome message.
-- **`GET /feeds`**: Fetch and display the aggregated feeds.
+- **`GET /`**: Displays the aggregated RSS feeds in a responsive web interface.
 
 ### Built With
 
 - [Clojure](https://clojure.org/) - The programming language used
 - [Pedestal](https://github.com/pedestal/pedestal) - A set of libraries for building web applications in Clojure
 - [clj-http](https://github.com/dakrone/clj-http) - HTTP client library for Clojure
-- [Cheshire](https://github.com/dakrone/cheshire) - JSON encoding/decoding library for Clojure
+- [Selmer](https://github.com/yogthos/Selmer) - A fast, Django-inspired template system for Clojure
+- [Logback](https://logback.qos.ch/) - Logging framework for Java/Clojure
