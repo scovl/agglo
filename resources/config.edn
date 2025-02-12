@@ -1,7 +1,3 @@
-{:rss-urls ["https://hnrss.org/frontpage"
-            "https://feeds.feedburner.com/clojure"
-            "https://planet.clojure.in/atom.xml"
-            "https://news.mit.edu/rss/feed"
-            "https://www.nasa.gov/rss/dyn/breaking_news.rss"]
- ;; Outras configurações podem ser adicionadas aqui
+{:rss-urls ["https://infoslack.com/atom.xml"
+            "https://gomex.me/blog/index.xml"]
  }
