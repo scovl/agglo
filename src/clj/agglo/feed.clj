@@ -147,9 +147,11 @@
   (log/info "Processing feed from URL:" url)
   (if-let [xml-str (fetch-url url)]
     (if-let [xml-data (parse-xml xml-str)]
-      (let [feed-data (extract-feed-data xml-data)]
+      (let [feed-data (extract-feed-data xml-data)
+            latest-entry (-> feed-data :entries first vector)]
         (log/info "Successfully extracted feed data:" feed-data)
-        feed-data)
+        (-> feed-data
+            (assoc :entries latest-entry)))
       {:title "Error parsing feed" :entries []})
     {:title "Error fetching feed" :entries []}))
 
