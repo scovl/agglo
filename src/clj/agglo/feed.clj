@@ -48,14 +48,14 @@
       (update :entries
               (fn [entries]
                 (map (fn [entry]
-                       (-> entry
-                           (dissoc :foreign-markup)
-                           (update :description
-                                   (fn [desc]
-                                     (cond
-                                       (string? desc) desc
-                                       (map? desc) (get desc :value "No description")
-                                       :else "No description")))))
+                       (let [desc (cond
+                                    (string? (:description entry)) (:description entry)
+                                    (map? (:description entry)) (get-in entry [:description :value])
+                                    (:contents entry) (-> entry :contents first :value)
+                                    :else nil)]
+                         (-> entry
+                             (dissoc :foreign-markup :contents)
+                             (assoc :description (or desc "No description")))))
                      (or entries [])))))) ;; Garante que entries nunca seja nil
 
 ;; Helper function to truncate text
@@ -84,11 +84,18 @@
       (log/warn "Failed to parse date:" date-str e)
       nil)))
 
+(defn entry-date-str [entry]
+  (or (:pubDate entry)
+      (:publishedDate entry)
+      (:published-date entry)
+      (:updatedDate entry)
+      (:updated-date entry)))
+
 ;; Sort posts by publication date (most recent first)
 (defn sort-entries-by-date [entries]
   (->> entries
        (sort-by (fn [entry]
-                  (if-let [date (parse-date (:pubDate entry))]
+                  (if-let [date (parse-date (entry-date-str entry))]
                     (- (.getTime date))
                     -1))
                 >)))
@@ -181,10 +188,11 @@
           feed     (-> raw-feed buran/shrink sanitize-feed)
           title    (get-in feed [:info :title])
           entries  (:entries feed)
-          sorted-entries (sort-entries-by-date entries)]
+          sorted    (sort-entries-by-date entries)
+          latest    (first sorted)]
       (log/info "Successfully extracted feed data:" feed)
       {:title (or title "")
-       :entries (vec sorted-entries)})
+       :entries (if latest [latest] [])})
     (catch Exception e
       (log/error e "Failed to fetch or parse feed" url)
       {:title "Error fetching feed" :entries []})))
