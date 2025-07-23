@@ -2,15 +2,13 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.edn :as edn]
-            [clj-http.client :as client]
             [buran.core :as buran]
             [clojure.walk :refer [postwalk]]
             [clojure.string :as str]
             [clj-http.client :as http]
             [clojure.xml :as xml]
             [clojure.zip :as zip]
-            [clojure.data.zip.xml :as zip-xml]
-            [clojure.java.io :as io])
+            [clojure.data.zip.xml :as zip-xml])
   (:import (org.jdom2 Element)
            (java.io ByteArrayInputStream)))
 
@@ -162,10 +160,9 @@
     (vec (map fetch-feed urls))))
 
 ;; Função principal para iniciar o processamento dos feeds
-(defn main []
+(defn -main []
   (log/info "Starting feed processing")
   (let [feeds (fetch-feeds)]
     (log/info "Feeds fetched:" feeds)
     feeds)) ;; Retorna os feeds para que possam ser usados em outra parte do sistema
 
-(main)
