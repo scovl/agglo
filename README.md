@@ -5,7 +5,7 @@ Agglo is a blog aggregator (a planet) that aggregates and displays updates from 
 ### Prerequisites
 
 - [Clojure](https://clojure.org/guides/getting_started)
-- [Boot](https://boot-clj.github.io/)
+- [Leiningen](https://leiningen.org/)
 
 ### Installing
 
@@ -23,7 +23,7 @@ Agglo is a blog aggregator (a planet) that aggregates and displays updates from 
 
 3. **Install dependencies:**
 
-   Boot will automatically download and install the necessary dependencies when you run the tasks.
+   Leiningen will automatically download and install the necessary dependencies when you run the tasks.
 
 ### Configuration
 
@@ -36,16 +36,11 @@ Logs are written to `logs/app.log`.
 
 ### Running the Application
 
-To start the application in development mode with auto-reload:
+Compile the ClojureScript assets and start the application:
 
 ```bash
-boot dev
-```
-
-Or for a simple run:
-
-```bash
-boot run
+lein cljsbuild once
+lein run
 ```
 
 This will start a web server at `http://localhost:8080`.
