@@ -10,7 +10,9 @@
             [clojure.zip :as zip]
             [clojure.data.zip.xml :as zip-xml])
   (:import (org.jdom2 Element)
-           (java.io ByteArrayInputStream)))
+           (java.io ByteArrayInputStream)
+           (java.text SimpleDateFormat)
+           (java.util Date Locale)))
 
 ;; Carrega as configurações do arquivo config.edn
 (defn load-config []
@@ -61,6 +63,35 @@
   (if (and text (> (count text) max-length))
     (str (subs text 0 max-length) "...")
     text))
+
+;; Parse dates from different RSS formats
+(defn parse-date [date-str]
+  (try
+    (when date-str
+      (let [formats ["EEE, dd MMM yyyy HH:mm:ss Z"
+                     "yyyy-MM-dd'T'HH:mm:ss'Z'"
+                     "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+                     "EEE MMM dd HH:mm:ss zzz yyyy"
+                     "yyyy-MM-dd HH:mm:ss"
+                     "dd MMM yyyy HH:mm:ss Z"]]
+        (some (fn [fmt]
+                (try
+                  (let [sdf (SimpleDateFormat. fmt Locale/US)]
+                    (.parse sdf date-str))
+                  (catch Exception _ nil)))
+              formats)))
+    (catch Exception e
+      (log/warn "Failed to parse date:" date-str e)
+      nil)))
+
+;; Sort posts by publication date (most recent first)
+(defn sort-entries-by-date [entries]
+  (->> entries
+       (sort-by (fn [entry]
+                  (if-let [date (parse-date (:pubDate entry))]
+                    (- (.getTime date))
+                    -1))
+                >)))
 
 (defn xml->map [xml-str]
   (try
@@ -145,13 +176,18 @@
 
 (defn fetch-feed [url]
   (log/info "Processing feed from URL:" url)
-  (if-let [xml-str (fetch-url url)]
-    (if-let [xml-data (parse-xml xml-str)]
-      (let [feed-data (extract-feed-data xml-data)]
-        (log/info "Successfully extracted feed data:" feed-data)
-        feed-data)
-      {:title "Error parsing feed" :entries []})
-    {:title "Error fetching feed" :entries []}))
+  (try
+    (let [raw-feed (buran/consume-http url)
+          feed     (-> raw-feed buran/shrink sanitize-feed)
+          title    (get-in feed [:info :title])
+          entries  (:entries feed)
+          sorted-entries (sort-entries-by-date entries)]
+      (log/info "Successfully extracted feed data:" feed)
+      {:title (or title "")
+       :entries (vec sorted-entries)})
+    (catch Exception e
+      (log/error e "Failed to fetch or parse feed" url)
+      {:title "Error fetching feed" :entries []})))
 
 (defn fetch-feeds []
   (let [config (load-config)
