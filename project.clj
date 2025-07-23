@@ -32,5 +32,5 @@
                                    :asset-path "js/out"
                                    :optimizations :advanced
                                    :main agglo.core
-                                   :source-map true}}]}
+                                   :source-map "resources/public/js/main.js.map"}}]}
   :main agglo.core)
