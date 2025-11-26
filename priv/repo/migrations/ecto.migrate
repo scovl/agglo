@@ -1,0 +1,26 @@
+defmodule Agglo.Repo.Migrations.CreateFeedsAndPosts do
+  use Ecto.Migration
+
+  def change do
+    create table(:feeds) do
+      add :title, :string
+      add :url, :string, null: false
+      add :site_url, :string
+      timestamps()
+    end
+
+    create unique_index(:feeds, [:url])
+
+    create table(:posts) do
+      add :title, :string
+      add :url, :string, null: false
+      add :content, :text
+      add :published_at, :utc_datetime
+      add :feed_id, references(:feeds, on_delete: :delete_all)
+      timestamps()
+    end
+
+    create unique_index(:posts, [:url]) # Evita duplicatas
+    create index(:posts, [:published_at]) # Para ordenar a timeline
+  end
+end

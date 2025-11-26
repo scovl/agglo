@@ -1,0 +1,26 @@
+<div class="max-w-4xl mx-auto py-8 px-4">
+  <header class="mb-10 text-center border-b pb-4">
+    <h1 class="text-4xl font-bold text-slate-800">Agglo Planet</h1>
+    <p class="text-slate-500">O universo centralizado de feeds.</p>
+  </header>
+
+  <div class="space-y-8">
+    <%= for post <- @posts do %>
+      <article class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+        <div class="flex items-center text-sm text-slate-500 mb-2">
+          <span class="font-semibold text-indigo-600 mr-2"><%= post.feed.title %></span>
+          <span>&bull;</span>
+          <span class="ml-2"><%= Calendar.strftime(post.published_at, "%d/%m/%Y %H:%M") %></span>
+        </div>
+
+        <h2 class="text-2xl font-bold text-slate-900 mb-3 hover:text-indigo-600">
+          <a href={post.url} target="_blank"><%= post.title %></a>
+        </h2>
+
+        <div class="prose max-w-none text-slate-700">
+          <%= raw(post.content) %>
+        </div>
+      </article>
+    <% end %>
+  </div>
+</div>
