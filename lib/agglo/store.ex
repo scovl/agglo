@@ -16,9 +16,9 @@ defmodule Agglo.Store do
     Agent.update(__MODULE__, fn state ->
       # Adiciona se não existir (verificação simples por URL)
       if Enum.any?(state.feeds, &(&1.url == feed.url)) do
-	state
+        state
       else
-	s(Map.put(state, :feeds, [feed | state.feeds]))
+        Map.put(state, :feeds, [feed | state.feeds])
       end
     end)
   end
