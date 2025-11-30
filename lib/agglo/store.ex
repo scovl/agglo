@@ -1,45 +1,33 @@
 defmodule Agglo.Store do
+  @moduledoc """
+  Agente simples para armazenar metadados de feeds cadastrados
+  pelo usuário. O conteúdo dos feeds (posts) é materializado
+  em storage de objetos, não em memória.
+  """
+
   use Agent
 
   def start_link(_opts) do
-    # Estado inicial: listas vazias
-    Agent.start_link(fn -> %{feeds: [], posts: []} end, name: __MODULE__)
+    # Estado inicial: apenas feeds registrados pelo usuário
+    Agent.start_link(fn -> %{feeds: []} end, name: __MODULE__)
   end
 
-  # --- FEEDS ---
-
+  @doc """
+  Lista os feeds adicionados em tempo de execução (além dos padrão).
+  """
   def list_feeds do
     Agent.get(__MODULE__, & &1.feeds)
   end
 
+  @doc """
+  Registra um novo feed se ainda não existir (comparando por URL).
+  """
   def add_feed(feed) do
     Agent.update(__MODULE__, fn state ->
-      # Adiciona se não existir (verificação simples por URL)
       if Enum.any?(state.feeds, &(&1.url == feed.url)) do
         state
       else
         Map.put(state, :feeds, [feed | state.feeds])
-      end
-    end)
-  end
-
-  # --- POSTS ---
-
-  def list_posts do
-    Agent.get(__MODULE__, fn state ->
-      # Retorna ordenado por data (mais recente primeiro)
-      state.posts
-      |> Enum.sort_by(& &1.date, {:desc, Date})
-    end)
-  end
-
-  def add_post(post) do
-    Agent.update(__MODULE__, fn state ->
-      # Evita duplicatas pela URL do post
-      if Enum.any?(state.posts, &(&1.url == post.url)) do
-	state
-      else
-	Map.put(state, :posts, [post | state.posts])
       end
     end)
   end
