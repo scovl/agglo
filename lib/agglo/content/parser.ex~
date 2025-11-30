@@ -1,0 +1,84 @@
+defmodule Agglo.Content.Parser do
+  import SweetXml
+
+  def parse(xml_string) do
+    if is_atom_feed?(xml_string) do
+      parse_atom(xml_string)
+    else
+      parse_rss(xml_string)
+    end
+  end
+
+  defp is_atom_feed?(xml) do
+    # Verifica se parece com Atom (tem namespace ou tag feed)
+    xml =~ "http://www.w3.org/2005/Atom" or xml =~ "<feed"
+  end
+
+  # --- RSS Parser ---
+  defp parse_rss(xml) do
+    xml
+    |> xpath(
+      ~x"//channel/item"l,
+      title: ~x"./title/text()"s,
+      url: ~x"./link/text()"s,
+      description: ~x"./description/text()"s,
+      content_encoded: ~x"./content:encoded/text()"s,
+      pub_date: ~x"./pubDate/text()"s,
+      guid: ~x"./guid/text()"s
+    )
+    |> Enum.map(&normalize_entry/1)
+  end
+
+  # --- Atom Parser ---
+  def parse_atom(xml_string) do
+    xml_string
+    |> xpath(
+      ~x"//entry"l,
+      title: ~x"title/text()"s,
+      url: ~x"link/@href"s,
+      updated: ~x"updated/text()"s,
+      published: ~x"published/text()"s
+    )
+  end
+
+  defp normalize_entry(entry) do
+    # Normaliza os dados para nosso formato
+    content = 
+      presence(entry[:content_encoded]) || 
+      presence(entry[:content]) || 
+      presence(entry[:description]) || 
+      presence(entry[:summary]) || ""
+
+    # Tenta pegar a data disponível
+    date_str = 
+      presence(entry[:updated]) || 
+      presence(entry[:published]) || 
+      presence(entry[:pub_date])
+    
+    url = 
+      presence(entry[:url]) || 
+      presence(entry[:url_alt]) || 
+      presence(entry[:guid])
+
+    %{
+      title: entry.title,
+      url: url,
+      content: content,
+      published_at: parse_date(date_str)
+    }
+  end
+
+  defp presence(""), do: nil
+  defp presence(nil), do: nil
+  defp presence(val), do: val
+
+  defp parse_date(nil), do: DateTime.utc_now()
+  defp parse_date(date_str) do
+    # Tenta parsing ISO8601 (Atom), se falhar usa data atual (RSS complexo)
+    # Em produção usaríamos uma lib como Timex para datas complexas
+    case DateTime.from_iso8601(date_str) do
+      {:ok, dt, _} -> dt
+      _ -> DateTime.utc_now()
+    end
+  end
+end

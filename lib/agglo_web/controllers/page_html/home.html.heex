@@ -1,0 +1,26 @@
+<div class="max-w-2xl mx-auto py-8">
+  <h1 class="text-3xl font-bold mb-8 text-center text-purple-700">Agglo Feed</h1>
+
+  <div class="space-y-6">
+    <%= if Enum.empty?(@posts) do %>
+      <div class="text-center text-gray-500 py-10 bg-gray-50 rounded-lg">
+        <p class="text-xl">📭 Nenhum post encontrado ainda.</p>
+        <p class="text-sm mt-2">O worker deve estar buscando notícias...</p>
+      </div>
+    <% else %>
+      <%= for post <- @posts do %>
+        <article class="p-6 bg-white rounded-lg shadow-md border border-gray-100 hover:shadow-lg transition">
+          <h2 class="text-xl font-semibold mb-2">
+            <a href={post.url} target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">
+              <%= post.title %>
+            </a>
+          </h2>
+          <div class="flex items-center text-sm text-gray-500 gap-4">
+            <span class="font-medium text-gray-700">📺 <%= post.feed_title %></span>
+            <span>📅 <%= post.date %></span>
+          </div>
+        </article>
+      <% end %>
+    <% end %>
+  </div>
+</div>
